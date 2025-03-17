@@ -16,7 +16,7 @@ load_dotenv()
 
 # Define API endpoints and keys
 NEWS_API = "https://api.mediastack.com/newsRunAPIRequest?access_key=114a71bf4eee701bcce106bb45d7ee39&country=in"
-EVENTS_API = "https://www.eventbriteapi.com/v3/events/search/"
+EVENTS_API = "https://app.ticketmaster.com/discovery/v2/events.json"  # Ticketmaster API endpoint
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 SPOTIFY_API = "https://api.spotify.com/v1/browse/new-releases"
 MEMES_API = "https://api.imgflip.com/get_memes"
@@ -87,6 +87,25 @@ def get_trending_memes():
     meme_details = [{"name": meme["name"], "url": meme["url"]} for meme in memes]
     return meme_details
 
+# Function to fetch events using Ticketmaster API
+def get_events():
+    params = {
+        "apikey": os.getenv('EVENTS_API_KEY'),
+        "countryCode": "IN",
+        "classificationName": "music,sports,other,festival",
+        "size": 5,
+        "sort": "date,asc"
+    }
+    response = requests.get(EVENTS_API, params=params)
+    
+    events_data = response.json().get("_embedded", {}).get("events", [])
+    events = [{
+            "name": event["name"], 
+            "start": event["dates"]["start"]["dateTime"],
+            "location": event["_embedded"]["venues"][0]["name"]
+        } for event in events_data]
+    return events
+
 # Initialize the LLM
 llm = Gemini(api_key=GEMINI_API_KEY, model="gemini-1.5-flash")
 
@@ -123,6 +142,15 @@ def main():
                 response = requests.get(meme['url'])
                 img = Image.open(BytesIO(response.content))
                 img.show()
+        elif user_input == "trending events":
+            print("Fetching events...")
+            events = get_events()
+            for idx, event in enumerate(events, start=1):
+                print(f"Event {idx}:")
+                print(f"  Name: {event['name']}")
+                print(f"  Start: {event['start']}")
+                print(f"  Location: {event['location']}")
+                print("-" * 40)
         else:
             response = chain.run({"input": user_input})
             print(f"ThinkForge: {response}")
