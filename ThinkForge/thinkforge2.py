@@ -10,6 +10,8 @@ from langchain.prompts import PromptTemplate
 import pandas as pd
 from PIL import Image
 from io import BytesIO
+from requests import post
+from spotnew import SpotifyTrending
 
 # Load environment variables from .env file
 load_dotenv()
@@ -28,18 +30,9 @@ SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# Function to fetch Spotify access token
-def get_spotify_access_token():
-    auth_response = requests.post(
-        SPOTIFY_TOKEN_URL,
-        data={
-            "grant_type": "client_credentials"
-        },
-        headers={
-            "Authorization": f"Basic {base64.b64encode(f'{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}'.encode()).decode()}"
-        }
-    )
-    return auth_response.json().get("access_token")
+
+
+
 
 # Function to fetch trending searches using web scraping
 def get_trending_searches():
@@ -72,13 +65,7 @@ def get_trending_news():
     titles = [item['title'] for item in news_items]
     return titles
 
-# Function to fetch trending songs
-def get_trending_songs():
-    access_token = get_spotify_access_token()
-    response = requests.get(SPOTIFY_API, headers={"Authorization": f"Bearer {access_token}"})
-    albums = response.json().get("albums", {}).get("items", [])
-    song_names = [album["name"] for album in albums]
-    return song_names
+
 
 # Function to fetch trending memes
 def get_trending_memes():
@@ -132,7 +119,15 @@ def main():
             print(json.dumps(get_trending_news(), indent=2))
         elif user_input == "trending songs":
             print("Fetching trending songs...")
-            print(json.dumps(get_trending_songs(), indent=2))
+            spotify = SpotifyTrending()
+            songs = spotify.get_trending_songs()
+            for idx, song in enumerate(songs, start=1):
+                print(f"Song {idx}:")
+                print(f"  Name: {song['name']}")
+                print(f"  Artist: {song['artist']}")
+                print(f"  Album: {song['album']}")
+                print("-" * 40)
+
         elif user_input == "trending memes":
             print("Fetching trending memes...")
             memes = get_trending_memes()
