@@ -4,10 +4,16 @@ import os
 from dotenv import load_dotenv
 import sys
 from datetime import datetime, timedelta
+import pygame
+import urllib.request
+import tempfile
+import time
 
 class SpotifyTrending:
     def __init__(self):
         self.sp = self.authenticate_spotify()
+        # Initialize pygame mixer for audio playback
+        pygame.mixer.init()
         
     def authenticate_spotify(self):
         """Authenticate with Spotify API using credentials from .env file"""
@@ -45,7 +51,7 @@ class SpotifyTrending:
             tracks = []
             results = self.sp.playlist_tracks(
                 playlist_id,
-                fields='items(added_at,track(name,id,artists,album,popularity))',
+                fields='items(added_at,track(name,id,artists,album,popularity,preview_url,uri))',
                 limit=limit
             )
             
@@ -56,11 +62,53 @@ class SpotifyTrending:
                         'name': track['name'],
                         'artist': ', '.join(artist['name'] for artist in track['artists']),
                         'album': track['album']['name'],
+                        'preview_url': track.get('preview_url'),
+                        'uri': track.get('uri'),
+                        'popularity': track.get('popularity', 0)
                     })
             return tracks
         except Exception as e:
             print(f"Error fetching playlist {playlist_id}: {e}")
             return []
+    def play_song(self, preview_url):
+        """Play a song preview using pygame mixer"""
+        if not preview_url:
+            print("No preview URL available for this track.")
+            return False
+        
+        try:
+            print("Downloading preview...")
+            # Create a temporary file to store the preview
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp3')
+            temp_file.close()
+            
+            # Download the preview
+            urllib.request.urlretrieve(preview_url, temp_file.name)
+            
+            # Load and play the preview
+            print("Playing preview... (Press Ctrl+C to stop)")
+            pygame.mixer.music.load(temp_file.name)
+            pygame.mixer.music.play()
+            
+            # Play for up to 30 seconds (or until the preview ends)
+            start_time = time.time()
+            try:
+                while pygame.mixer.music.get_busy() and (time.time() - start_time < 30):
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                print("\nStopping playback...")
+            finally:
+                pygame.mixer.music.stop()
+                # Clean up the temporary file
+                try:
+                    os.unlink(temp_file.name)
+                except:
+                    pass
+            
+            return True
+        except Exception as e:
+            print(f"Error playing track: {e}")
+            return False
 
     def get_trending_songs(self, limit=10):
         """Get trending songs from various sources"""
@@ -92,6 +140,9 @@ class SpotifyTrending:
         # Remove added_at before returning
         for track in all_tracks:
             track.pop('added_at', None)
+            # Make sure all tracks have popularity field
+            if 'popularity' not in track:
+                track['popularity'] = 0
             
         return all_tracks[:limit]
 
@@ -109,7 +160,11 @@ class SpotifyTrending:
             print(f"\n{i}. Song: {song['name']}")
             print(f"   Artist: {song['artist']}")
             print(f"   Album: {song['album']}")
-            print(f"   Popularity: {song['popularity']}")
+            print(f"   Popularity: {song.get('popularity', 'N/A')}")
+            if song.get('preview_url'):
+                print(f"   Preview Available: Yes")
+            else:
+                print(f"   Preview Available: No")
             print("-"*60)
 
 def main():
@@ -129,6 +184,29 @@ def main():
     try:
         trending_songs = spotify.get_trending_songs()
         spotify.display_trending_songs(trending_songs)
+        
+        # Add song playback functionality
+        print("\nWould you like to play a preview of any song? (y/n)")
+        choice = input().strip().lower()
+        if choice == 'y':
+            while True:
+                print("\nEnter the number of the song to play (or 'q' to quit):")
+                selection = input().strip()
+                if selection.lower() == 'q':
+                    break
+                
+                try:
+                    index = int(selection) - 1
+                    if 0 <= index < len(trending_songs):
+                        selected_song = trending_songs[index]
+                        print(f"\nPlaying preview for: {selected_song['name']} by {selected_song['artist']}")
+                        
+                        if not spotify.play_song(selected_song.get('preview_url')):
+                            print("No preview available or playback error. Try another song.")
+                    else:
+                        print("Invalid selection. Please enter a valid number.")
+                except ValueError:
+                    print("Please enter a valid number or 'q' to quit.")
     except Exception as e:
         print(f"Error fetching trending songs: {e}")
         print("Please check your internet connection and Spotify credentials.")
